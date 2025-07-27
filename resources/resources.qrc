@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file>styles/modern.qss</file>
+        <file>audio/bg_music.mp3</file>
+        <file>icons/app.png</file>
+        <!-- dodaj jos po potrebi -->
+    </qresource>
+</RCC>
