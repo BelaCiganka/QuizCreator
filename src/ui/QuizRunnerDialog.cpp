@@ -13,6 +13,9 @@
 #include <QMessageBox>
 #include <QButtonGroup>
 #include <QRegularExpression>
+#include <QEvent>
+#include <QKeyEvent>
+#include <QScrollArea>
 
 QuizRunnerDialog::QuizRunnerDialog(const User& user,
                                    int quizId,
@@ -25,6 +28,7 @@ QuizRunnerDialog::QuizRunnerDialog(const User& user,
     , m_mode(mode)
     , m_dir(dir)
 {
+    loadLocalStyle();
     setWindowTitle("Quiz in progress");
     resize(700,500);
 
@@ -34,89 +38,10 @@ QuizRunnerDialog::QuizRunnerDialog(const User& user,
         reject(); return;
     }
     setupUI();
+    installEventFilter(this);
     showCurrentQuestion();
 }
 
-// ---------- data load ----------
-// void QuizRunnerDialog::loadQuestions()
-// {
-//     // 0) sve iz baze za taj kviz + shuffle
-//     auto qs = QuestionRepository::byQuiz(m_quizId);
-//     std::shuffle(qs.begin(), qs.end(), *QRandomGenerator::global());
-
-//     for (const auto &q : qs)
-//     {
-//         // 1) filter po režimu  ─────────────────────────────────────────
-//         //    True/False mod: prihvati samo TF
-//         if (m_mode == QuizSelectDialog::Mode::TrueFalse && q.type != QuestionType::TrueFalse)
-//             continue;
-
-//         //    MultipleChoice mod: odbaci SAMO True/False,
-//         //    zadrži MultipleChoice + ShortAnswer (konvertovaćemo ih)
-//         if (m_mode == QuizSelectDialog::Mode::MultipleChoice && q.type == QuestionType::TrueFalse)
-//             continue;
-//         //  (Mixed mod ne odbacuje ništa ovde)
-
-//         // 2) napravi SessionQuestion zapis
-//         SessionQuestion sq;
-//         sq.q       = q;
-//         sq.answers = AnswerRepository::byQuestion(q.id);
-
-//         //    elementarna validacija – preskoči ako nema odgovora
-//         if (sq.answers.isEmpty())
-//             continue;
-
-//         switch (q.type) {
-//         case QuestionType::TrueFalse:
-//             if (sq.answers.size() != 2) continue;
-//             break;
-//         case QuestionType::MultipleChoice:
-//             if (sq.answers.size() < 2)  continue;
-//             break;
-//         case QuestionType::ShortAnswer:
-//             /* bar 1 odgovor već imamo */
-//             break;
-//         }
-
-//         // 3) Kada je režim MC *ili* Mixed i pitanje je ShortAnswer
-//         //    → generiši MC varijantu (1 tačan + 3 pogrešna)
-//         if ((m_mode == QuizSelectDialog::Mode::MultipleChoice ||
-//              m_mode == QuizSelectDialog::Mode::Mixed) &&
-//             q.type  == QuestionType::ShortAnswer)
-//         {
-//             const QString correct = sq.answers.first().text;
-
-//             // pool drugih short-odgovora u istom kvizu
-//             QList<QString> pool;
-//             for (const auto &cand : qs) {
-//                 if (cand.type != QuestionType::ShortAnswer || cand.id == q.id)
-//                     continue;
-//                 auto candAns = AnswerRepository::byQuestion(cand.id);
-//                 if (!candAns.isEmpty())
-//                     pool << candAns.first().text;
-//             }
-//             pool.removeAll(correct);
-//             std::shuffle(pool.begin(), pool.end(), *QRandomGenerator::global());
-
-//             // obezbedi 3 distractora
-//             while (pool.size() < 3)
-//                 pool << "???";
-
-//             QList<Answer> mc;
-//             mc << Answer{ .text = correct, .isCorrect = true };
-//             for (int i = 0; i < 3; ++i)
-//                 mc << Answer{ .text = pool[i], .isCorrect = false };
-//             std::shuffle(mc.begin(), mc.end(), *QRandomGenerator::global());
-
-//             // upiši izmenjeni tip i answers
-//             sq.q.type  = QuestionType::MultipleChoice;
-//             sq.answers = mc;
-//         }
-
-//         // 4) Ubaci u listu za kviz-run
-//         m_questions << sq;
-//     }
-// }
 
 void QuizRunnerDialog::loadQuestions()
 {
@@ -204,43 +129,101 @@ void QuizRunnerDialog::loadQuestions()
 // ---------- UI ----------
 void QuizRunnerDialog::setupUI()
 {
-    auto* v = new QVBoxLayout(this);
+    /* =====  ROOT (card-layout)  ===== */
+    auto *root = new QVBoxLayout(this);
+    root->setSpacing(0);
+    root->setContentsMargins(0,0,0,0);
 
-    m_progressLbl = new QLabel(this);
-    v->addWidget(m_progressLbl);
+    /* ———  Card container  ——— */
+    auto *card = new QFrame(this);
+    card->setObjectName("quizCard");
+    card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    auto *cv = new QVBoxLayout(card);
+    cv->setContentsMargins(32,24,32,24);
+    cv->setSpacing(18);
+    root->addWidget(card);
 
-    m_questionLabel = new QLabel(this);
+    /* ── 1. Header: progress bar + timer ──────────────────── */
+    auto *hdr = new QHBoxLayout();
+    hdr->setSpacing(12);
+
+    m_progBar = new QProgressBar(card);
+    m_progBar->setRange(0, m_questions.size());
+    m_progBar->setValue(1);
+    m_progBar->setFixedHeight(14);
+    m_progBar->setTextVisible(false);
+
+    m_timerLbl = new QLabel("00:00", card);
+    m_timerLbl->setObjectName("timerLabel");
+
+    hdr->addWidget(m_progBar, /*stretch*/4);
+    hdr->addWidget(m_timerLbl);
+    cv->addLayout(hdr);
+
+    /* ── 2. Brojač pitanja ───────────────────────────────── */
+    m_progressLbl = new QLabel(card);                 // “Q 1 / 10   |   0 / 10”
+    m_progressLbl->setObjectName("statusLabel");
+    cv->addWidget(m_progressLbl);
+
+    /* ── 3. Tekst pitanja ────────────────────────────────── */
+    m_questionLabel = new QLabel(card);
+    m_questionLabel->setObjectName("questionText");
     m_questionLabel->setWordWrap(true);
-    m_questionLabel->setStyleSheet("font-weight:bold; font-size:16px");
-    v->addWidget(m_questionLabel);
+    cv->addWidget(m_questionLabel);
 
-    m_answerWidget = new QWidget(this);
+    /* ── 4. Hint label ───────────────────────────────────── */
+    m_hintLabel = new QLabel(card);
+    m_hintLabel->setObjectName("hintLabel");
+    cv->addWidget(m_hintLabel);
+
+    /* ── 5. Scroll-zona s ponudama ───────────────────────── */
+    auto *scroll = new QScrollArea(card);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    m_answerWidget = new QWidget(scroll);
     m_answerLayout = new QVBoxLayout(m_answerWidget);
-    v->addWidget(m_answerWidget,1);
+    m_answerLayout->setSpacing(12);
+    m_answerLayout->setContentsMargins(4,4,4,4);
+    scroll->setWidget(m_answerWidget);
 
-    auto* h = new QHBoxLayout();
-    m_submitBtn = new QPushButton("Submit", this);
-    m_nextBtn   = new QPushButton("Next",   this);
+    cv->addWidget(scroll, /*stretch*/3);
 
-    m_hintBtn = new QPushButton("Hint", this);     // NEW
-    m_hintBtn->setEnabled(true);
-    h->insertWidget(0, m_hintBtn);                 // levo od Submit
+    /* ── 6. Footer bar ───────────────────────────────────── */
+    auto *ftr = new QHBoxLayout();
+    ftr->setSpacing(20);
 
-    m_hintLabel = new QLabel(this);                // NEW
-    m_hintLabel->setStyleSheet("color:#ffaa00");
-    v->insertWidget(2, m_hintLabel);               // ispod pitanja
+    m_hintBtn   = new QPushButton(card);
+    m_hintBtn->setText("Hint  (H)");
+    m_hintBtn->setObjectName("ghostBtn");
 
+    m_submitBtn = new QPushButton("Submit  (Space)", card);
+    m_submitBtn->setObjectName("primaryBtn");
+
+    m_nextBtn   = new QPushButton("Next  (Space)", card);
+    m_nextBtn->setObjectName("primaryBtn");
     m_nextBtn->setEnabled(false);
-    h->addStretch();
-    h->addWidget(m_submitBtn);
-    h->addWidget(m_nextBtn);
-    v->addLayout(h);
 
+    ftr->addWidget(m_hintBtn);
+    ftr->addStretch();
+    ftr->addWidget(m_submitBtn);
+    ftr->addWidget(m_nextBtn);
+    cv->addLayout(ftr);
+
+    /* ── signali ─────────────────────────────────────────── */
     connect(m_submitBtn,&QPushButton::clicked,this,&QuizRunnerDialog::onSubmit);
     connect(m_nextBtn,  &QPushButton::clicked,this,&QuizRunnerDialog::onNext);
-    connect(m_hintBtn, &QPushButton::clicked,
-            this, &QuizRunnerDialog::onHint);      // NEW
+    connect(m_hintBtn,  &QPushButton::clicked,this,&QuizRunnerDialog::onHint);
 
+    /* ———  Tajmer ——— */
+    m_timer.setInterval(1000);
+    connect(&m_timer,&QTimer::timeout,this,[this]{
+        m_elapsedMs += 1000;
+        m_timerLbl->setText(QString::asprintf("%02d:%02d",
+                                              (m_elapsedMs/1000)/60, (m_elapsedMs/1000)%60));
+    });
+    m_timer.start();
 }
 
 // ---------- per-question ----------
@@ -363,6 +346,7 @@ void QuizRunnerDialog::onSubmit()
 void QuizRunnerDialog::onNext()
 {
     ++m_currIdx;
+    m_progBar->setValue(m_currIdx);
     if (m_currIdx >= m_questions.size()) {
         // finished
         UserResult ur;
@@ -375,6 +359,7 @@ void QuizRunnerDialog::onNext()
         QMessageBox::information(this,"Done",
                                  QString("Score %1 / %2").arg(m_score).arg(m_questions.size()));
         accept();
+        m_timer.stop();
         return;
     }
     showCurrentQuestion();
@@ -432,4 +417,54 @@ void QuizRunnerDialog::onHint()            // NEW
         m_hintBtn->setEnabled(false);   // True/False – hint besmislen
         break;
     }
+}
+
+bool QuizRunnerDialog::eventFilter(QObject*, QEvent* ev)
+{
+    if (ev->type() == QEvent::KeyPress) {
+        auto* kev = static_cast<QKeyEvent*>(ev);
+        if (kev->key() == Qt::Key_Space) {
+            if (m_submitBtn->isEnabled())  onSubmit();
+            else if (m_nextBtn->isEnabled()) onNext();
+            return true;       // pojeli smo ga
+        }
+    }
+    return false;
+}
+
+void QuizRunnerDialog::loadLocalStyle()
+{
+    static const char *qss = R"(
+    /* card background */
+    #quizCard { background:#1e1e1e; border-radius:20px; }
+
+    /* timer */
+    #timerLabel { color:#9cdcfe; font-weight:600; }
+
+    /* status */
+    #statusLabel { color:#bbbbbb; font-size:13px; }
+
+    /* question text */
+    #questionText { font-size:20px; font-weight:600; color:#f2f2f2; }
+
+    /* hint */
+    #hintLabel { color:#ffb454; font-style:italic; }
+
+    /* progress bar */
+    QProgressBar { background:#2c2c2c; border:none; border-radius:7px; }
+    QProgressBar::chunk { background:#4e8cff; border-radius:7px; }
+
+    /* buttons */
+    QPushButton { padding:6px 18px; border-radius:14px; }
+    QPushButton#primaryBtn {
+        background:#4e8cff; color:#fff; border:none;
+    }
+    QPushButton#primaryBtn:hover { background:#639bff; }
+    QPushButton#primaryBtn:pressed { background:#3a6fe6; }
+    QPushButton#ghostBtn {
+        background:transparent; color:#cccccc;
+    }
+    QPushButton#ghostBtn:hover { color:#ffffff; }
+    )";
+    this->setStyleSheet(qss);
 }

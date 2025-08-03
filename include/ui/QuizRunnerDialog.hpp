@@ -1,5 +1,7 @@
 #pragma once
 #include <QDialog>
+#include <QProgressBar>
+#include <QTimer>
 #include "models/Question.hpp"
 #include "models/Answer.hpp"
 #include "models/User.hpp"
@@ -30,6 +32,8 @@ public:
                      QuizSelectDialog::Direction dir,
                      QWidget* parent=nullptr);
 
+    bool eventFilter(QObject *, QEvent *ev);
+
 private slots:
     void onSubmit();
     void onNext();
@@ -40,6 +44,7 @@ private:
     void setupUI();
     void showCurrentQuestion();
     bool checkAnswer(SessionQuestion& sq);     // returns correct?
+    void loadLocalStyle();
 
     // widgets
     QLabel*        m_questionLabel{};
@@ -48,6 +53,7 @@ private:
     QPushButton*   m_submitBtn{};
     QPushButton*   m_nextBtn{};
     QLabel*        m_progressLbl{};
+    QProgressBar* m_progBar{};
 
     // helpers for radios
     QList<QRadioButton*> m_radioBtns;
@@ -57,6 +63,7 @@ private:
     QPushButton*   m_hintBtn{};
     int            m_hintLevel = 0;
     QLabel*        m_hintLabel{};
+    int QRegExp(const char *);
 
     // data
     const User m_user;
@@ -67,5 +74,10 @@ private:
     QList<SessionQuestion> m_questions;
     int    m_currIdx  = 0;
     int    m_score    = 0;
-    int QRegExp(const char *);
+
+    QTimer        m_timer;
+    int           m_elapsedMs = 0;
+
+    QLabel *m_timerLbl;
+
 };
