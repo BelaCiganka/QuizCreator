@@ -7,7 +7,7 @@
 
 class AnswerRepository {
 public:
-    static int create(const Answer& a);
+    static bool create(Answer& a);
     static bool update(const Answer& a);
     static bool remove(int id);
     static bool removeByQuestion(int questionId);

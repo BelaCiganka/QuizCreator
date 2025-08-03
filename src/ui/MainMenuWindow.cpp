@@ -1,6 +1,8 @@
 #include "ui/MainMenuWindow.hpp"
 #include "ui/QuizRunDialog.hpp"
 #include "ui/QuestionEditorWindow.hpp"
+#include "ui/QuizSelectDialog.hpp"
+#include "ui/QuizRunnerDialog.hpp"
 
 #include <QVBoxLayout>
 #include <QPushButton>
@@ -40,8 +42,15 @@ MainMenuWindow::MainMenuWindow(const User& user, QWidget* parent)
 }
 
 void MainMenuWindow::onStartQuiz() {
-    QuizRunDialog dlg(m_user, this);
-    dlg.exec();
+    QuizSelectDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    QuizRunnerDialog run(m_user,
+                         dlg.selectedQuizId(),
+                         dlg.selectedMode(),
+                         nullptr);
+
+    run.exec();
 }
 
 void MainMenuWindow::onQuestionEditor() {

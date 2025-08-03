@@ -6,19 +6,22 @@
 #include <QVariant>
 #include <QDebug>
 
-int AnswerRepository::create(const Answer& a) {
+bool AnswerRepository::create(Answer& a)
+{
     QSqlQuery qu(Database::instance().db());
-    qu.prepare("INSERT INTO answers(question_id, text, is_correct) VALUES(:qid,:text,:c");
+    qu.prepare(R"(INSERT INTO answers
+                  (question_id, text, is_correct)
+                  VALUES (:qid, :txt, :isc))");           //  :qid  :txt  :isc
     qu.bindValue(":qid", a.questionId);
-    qu.bindValue(":text", a.text);
-    qu.bindValue(":c", a.isCorrect ? 1 : 0);
+    qu.bindValue(":txt", a.text.trimmed());               //  ИМЕ мора бити :txt
+    qu.bindValue(":isc", a.isCorrect ? 1 : 0);            //  ИМЕ :isc
 
     if (!qu.exec()) {
-        qWarning() << qu.lastError();
-        return -1;
+        qWarning() << qu.lastError();       // ← више неће јављати mismatch
+        return false;
     }
-
-    return qu.lastInsertId().toInt();
+    a.id = qu.lastInsertId().toInt();
+    return true;
 }
 
 bool AnswerRepository::update(const Answer& a) {

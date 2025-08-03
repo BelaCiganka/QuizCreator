@@ -4,6 +4,9 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
+#include <QStandardPaths>
+#include <QFileInfo>
+#include <QDir>
 
 Database::Database() = default;
 
@@ -12,18 +15,46 @@ Database& Database::instance() {
     return inst;
 }
 
-bool Database::open(const QString& path) {
+bool Database::open(const QString& customPath /* = QString() */)
+{
+    // Ако је база већ отворена – ништа не ради
     if (m_db.isValid() && m_db.isOpen())
         return true;
 
-    m_db = QSqlDatabase::addDatabase("QSQLITE");
-    m_db.setDatabaseName(path);
+    // 1. Одреди коначну путању
+    QString dbPath;
+    if (customPath.isEmpty()) {
+        //  ~/.local/share/QuizCreator  (или системски еквивалент)
+        QString dir = QStandardPaths::writableLocation(
+            QStandardPaths::AppDataLocation);    // нпр. ~/.local/share/QuizCreator
+        if (dir.isEmpty()) {
+            qCritical() << "Cannot determine AppDataLocation!";
+            return false;
+        }
+        QDir().mkpath(dir);             // креирај ако не постоји
+        dbPath = dir + "/quizcreator.db";
+    } else {
+        dbPath = customPath;
+        QDir().mkpath(QFileInfo(dbPath).absolutePath());
+    }
 
+    // 2. Иницијализуј QSQLITE драјвер
+    m_db = QSqlDatabase::addDatabase("QSQLITE");
+    m_db.setDatabaseName(dbPath);
+
+    // 3. Отвори везу
     if (!m_db.open()) {
-        qCritical() << "DB open error: " << m_db.lastError();
+        qCritical() << "DB open error:" << m_db.lastError();
         return false;
     }
 
+    // 4. Обавезно укључи FOREIGN KEY ограничења (SQLite опција)
+    {
+        QSqlQuery q(m_db);
+        q.exec("PRAGMA foreign_keys = ON;");
+    }
+
+    qDebug() << "SQLite DB opened at:" << dbPath;
     return true;
 }
 
@@ -93,7 +124,6 @@ void Database::ensureSchema() {
             FOREIGN KEY(user_id) REFERENCES users(id),
             FOREIGN KEY(quiz_id) REFERENCES quizzes(id)
         );
-        -- Indexi
     )";
 
     QSqlQuery q;

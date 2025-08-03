@@ -44,7 +44,8 @@ private slots:
 private:
     enum class Mode { Create, Edit };
     Mode m_mode = Mode::Create;
-    int  m_currentQuestionId = -1;
+
+    int m_currentQuestionId = -1;
 
     // Helpers
     void rebuildTypePage();
@@ -58,41 +59,59 @@ private:
     void resetEditor();
 
     // Widgets
-    QComboBox*     m_quizCombo{};
-    QPushButton*   m_newQuizBtn{};
+    QComboBox* m_quizCombo{};
+    QPushButton* m_newQuizBtn{};
 
-    QTableView*            m_questionTable{};
-    QStandardItemModel*    m_questionModel{};
+    QTableView* m_questionTable{};
+    QStandardItemModel* m_questionModel{};
 
-    QLineEdit*     m_questionText{};
-    QLineEdit*     m_hintEdit{};
-    QComboBox*     m_typeCombo{};
-    QLineEdit*     m_difficultyEdit{};
+    QLineEdit* m_questionText{};
+    QLineEdit* m_hintEdit{};
+    QComboBox* m_typeCombo{};
+    QLineEdit* m_difficultyEdit{};
 
-    QStackedWidget* m_typeStack{};   // 0=TrueFalse,1=MC,2=ShortAnswer
+    QStackedWidget* m_typeStack{};  // 0 = TrueFalse, 1 = MS, 2 = ShortAnswer
+    QRadioButton* m_tfTrue{};
+    QRadioButton* m_tfFalse{};
 
-    // True/False
-    QRadioButton*  m_tfTrue{};
-    QRadioButton*  m_tfFalse{};
+    QWidget* m_mcPage{};
+    QVBoxLayout* m_mcLayout{};
+    QPushButton* m_addAnswerBtn{};
 
-    // MultipleChoice
-    QWidget*       m_mcPage{};
-    QVBoxLayout*   m_mcLayout{};     // answers list
-    QPushButton*   m_addAnswerBtn{};
     struct MCRow {
-        QWidget*    rowWidget{};
-        QLineEdit*  text{};
-        QCheckBox*  correct{};
+        QWidget* rowWidget{};
+        QLineEdit* text{};
+        QCheckBox* correct{};
     };
+
     QList<MCRow> m_mcRows;
 
     // Short answer
-    QLineEdit*     m_shortAnswerEdit{};
+    QLineEdit* m_shortAnswerEdit{};
 
-    QPushButton*   m_saveBtn{};
-    QPushButton*   m_newQuestionBtn{};
-    QPushButton*   m_deleteBtn{};
-    QPushButton*   m_previewBtn{};
+    QPushButton* m_saveBtn{};
+    QPushButton* m_newQuestionBtn{};
+    QPushButton* m_deleteBtn{};
+    QPushButton* m_previewBtn{};
+
+    // Quick-add widgets
+    QLineEdit*  m_quickWordEdit{};
+    QLineEdit*  m_quickTransEdit{};
+    QPushButton* m_quickAddBtn{};
 
     QList<Quiz> m_quizzes;
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
