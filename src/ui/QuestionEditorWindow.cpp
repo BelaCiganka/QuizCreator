@@ -13,11 +13,10 @@
 #include <QLabel>
 #include <QComboBox>
 #include <QStackedWidget>
+#include <QStackedWidget>
 #include <QScrollArea>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QMessageBox>
-#include <QCheckBox>
 #include <QRadioButton>
 #include <QIntValidator>
 #include <QTableView>
@@ -27,21 +26,27 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QTextEdit>
+#include <QMessageBox>
+#include <QCheckBox>
+
 
 QuestionEditorWindow::QuestionEditorWindow(QWidget* parent)
-    : QMainWindow(parent)
-{
+    : QMainWindow(parent) {
+
     setWindowTitle("Question Editor");
     resize(1000, 650);
 
     Database::instance().open();
     Database::instance().ensureSchema();
 
-    // ----- ROOT LAYOUT -----
+    // ROOT LAYOUT
+    // -----------
+
     auto* central = new QWidget(this);
     auto* rootLayout = new QVBoxLayout(central);
 
-    // --- Quiz bar (top)
+    // Quiz bar - top
+    // --------------
     {
         auto* quizLayout = new QHBoxLayout();
         m_quizCombo = new QComboBox(central);
@@ -52,15 +57,69 @@ QuestionEditorWindow::QuestionEditorWindow(QWidget* parent)
         rootLayout->addLayout(quizLayout);
 
         connect(m_newQuizBtn, &QPushButton::clicked, this, &QuestionEditorWindow::onCreateQuiz);
+        // TODO: ? What is this
         connect(m_quizCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
                 this, &QuestionEditorWindow::onQuizChanged);
     }
 
-    // --- Splitter: left list, right editor
+    // QUICK ADD BAR
+    {
+        auto* quick = new QHBoxLayout();
+        m_quickWordEdit  = new QLineEdit(central);
+        m_quickTransEdit = new QLineEdit(central);
+        m_quickAddBtn    = new QPushButton("Quick Add", central);
+
+        m_quickWordEdit->setPlaceholderText("word");
+        m_quickTransEdit->setPlaceholderText("translation");
+
+        quick->addWidget(new QLabel("Word:"));
+        quick->addWidget(m_quickWordEdit, 1);
+        quick->addWidget(new QLabel("→"));
+        quick->addWidget(m_quickTransEdit, 1);
+        quick->addWidget(m_quickAddBtn);
+
+        rootLayout->addLayout(quick);
+
+        connect(m_quickAddBtn, &QPushButton::clicked, this, [this]{
+            if (m_quizCombo->currentIndex() < 0) {
+                QMessageBox::warning(this,"Quiz","Select a quiz first"); return;
+            }
+            const QString word = m_quickWordEdit->text().trimmed();
+            const QString trans= m_quickTransEdit->text().trimmed();
+            if (word.isEmpty() || trans.isEmpty()) {
+                QMessageBox::warning(this,"Input","Both fields required."); return;
+            }
+            Question q;
+            q.quizId = m_quizCombo->currentData().toInt();
+            q.type   = QuestionType::ShortAnswer;
+            q.text   = word;
+            q.hint   = QString();          // аутоматски hint ради касније
+            q.difficulty = 0;
+
+            int qid = QuestionRepository::create(q);
+            if (qid < 0) {
+                QMessageBox::critical(this,"DB","Failed to insert question"); return;
+            }
+            Answer a{ .questionId = qid, .text = trans, .isCorrect = true };
+            if (!AnswerRepository::create(a)) {
+                // desi se SAMO ako INSERT u DB nije prošao
+                QMessageBox::critical(this, "DB", "Answer insert failed!");
+                QuestionRepository::remove(qid);   // obriši pitanje da ne ostane bez odgovora
+                return;                            // prekini Quick-Add
+            }
+            m_quickWordEdit->clear();
+            m_quickTransEdit->clear();
+            reloadQuestionList();
+        });
+    }
+
+    // Splitter: left list, right editor
+    // ---------------------------------
     auto* splitter = new QSplitter(Qt::Horizontal, central);
     rootLayout->addWidget(splitter, 1);
 
     // LEFT: table of questions
+    // ------------------------
     {
         auto* leftWidget = new QWidget(splitter);
         auto* leftLayout = new QVBoxLayout(leftWidget);
@@ -73,41 +132,38 @@ QuestionEditorWindow::QuestionEditorWindow(QWidget* parent)
         m_questionTable->setSelectionMode(QAbstractItemView::SingleSelection);
         m_questionTable->horizontalHeader()->setStretchLastSection(true);
         m_questionTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        m_questionTable->setColumnHidden(0, true); // hide ID
+        m_questionTable->setColumnHidden(0, true);  // hide ID
         leftLayout->addWidget(m_questionTable, 1);
 
         auto* btnBar = new QHBoxLayout();
         m_newQuestionBtn = new QPushButton("New", leftWidget);
-        m_deleteBtn      = new QPushButton("Delete", leftWidget);
-        m_previewBtn     = new QPushButton("Preview", leftWidget);
+        m_deleteBtn = new QPushButton("Delete", leftWidget);
+        m_previewBtn = new QPushButton("Preview", leftWidget);
         btnBar->addWidget(m_newQuestionBtn);
         btnBar->addWidget(m_deleteBtn);
         btnBar->addWidget(m_previewBtn);
         leftLayout->addLayout(btnBar);
 
-        connect(m_questionTable, &QTableView::doubleClicked,
-                this, &QuestionEditorWindow::onQuestionRowActivated);
-        connect(m_newQuestionBtn, &QPushButton::clicked,
-                this, &QuestionEditorWindow::onNewQuestion);
-        connect(m_deleteBtn, &QPushButton::clicked,
-                this, &QuestionEditorWindow::onDeleteQuestion);
-        connect(m_previewBtn, &QPushButton::clicked,
-                this, &QuestionEditorWindow::onPreviewQuestion);
+        connect(m_questionTable, &QTableView::doubleClicked, this, &QuestionEditorWindow::onQuestionRowActivated);
+        connect(m_newQuestionBtn, &QPushButton::clicked, this, &QuestionEditorWindow::onNewQuestion);
+        connect(m_deleteBtn, &QPushButton::clicked, this, &QuestionEditorWindow::onDeleteQuestion);
+        connect(m_previewBtn, &QPushButton::clicked, this, &QuestionEditorWindow::onPreviewQuestion);
 
         leftWidget->setLayout(leftLayout);
         splitter->addWidget(leftWidget);
     }
 
     // RIGHT: editor form
+    // ------------------
     {
         auto* rightWidget = new QWidget(splitter);
         auto* editorLayout = new QVBoxLayout(rightWidget);
 
         auto* form = new QFormLayout();
         m_questionText = new QLineEdit(rightWidget);
-        m_hintEdit     = new QLineEdit(rightWidget);
-        m_typeCombo    = new QComboBox(rightWidget);
-        m_difficultyEdit = new QLineEdit(rightWidget);
+        m_hintEdit = new QLineEdit(rightWidget);
+        m_typeCombo = new QComboBox(rightWidget);
+        m_difficultyEdit = new QLineEdit(rightWidget);      // TODO: neka hint i difficulty budu opciono
         m_difficultyEdit->setValidator(new QIntValidator(0, 10, m_difficultyEdit));
 
         m_typeCombo->addItem("True/False", static_cast<int>(QuestionType::TrueFalse));
@@ -124,7 +180,8 @@ QuestionEditorWindow::QuestionEditorWindow(QWidget* parent)
         connect(m_typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
                 this, &QuestionEditorWindow::onQuestionTypeChanged);
 
-        // Type-specific area
+        // Type specific area
+        // ------------------
         m_typeStack = new QStackedWidget(rightWidget);
         editorLayout->addWidget(m_typeStack, 1);
 
@@ -132,9 +189,10 @@ QuestionEditorWindow::QuestionEditorWindow(QWidget* parent)
         {
             QWidget* tfPage = new QWidget(m_typeStack);
             auto* v = new QVBoxLayout(tfPage);
-            m_tfTrue  = new QRadioButton("True", tfPage);
+            m_tfTrue = new QRadioButton("True", tfPage);
             m_tfFalse = new QRadioButton("False", tfPage);
             m_tfTrue->setChecked(true);
+
             v->addWidget(m_tfTrue);
             v->addWidget(m_tfFalse);
             v->addStretch();
@@ -158,8 +216,7 @@ QuestionEditorWindow::QuestionEditorWindow(QWidget* parent)
             pv->addWidget(scroll, 1);
             pv->addWidget(m_addAnswerBtn);
 
-            connect(m_addAnswerBtn, &QPushButton::clicked,
-                    this, &QuestionEditorWindow::onAddAnswerRow);
+            connect(m_addAnswerBtn, &QPushButton::clicked, this, &QuestionEditorWindow::onAddAnswerRow);
 
             m_typeStack->addWidget(m_mcPage);
         }
@@ -178,8 +235,7 @@ QuestionEditorWindow::QuestionEditorWindow(QWidget* parent)
         // Save
         m_saveBtn = new QPushButton("Save", rightWidget);
         editorLayout->addWidget(m_saveBtn);
-        connect(m_saveBtn, &QPushButton::clicked,
-                this, &QuestionEditorWindow::onSaveQuestion);
+        connect(m_saveBtn, &QPushButton::clicked, this, &QuestionEditorWindow::onSaveQuestion);
 
         rightWidget->setLayout(editorLayout);
         splitter->addWidget(rightWidget);
@@ -189,19 +245,17 @@ QuestionEditorWindow::QuestionEditorWindow(QWidget* parent)
 
     reloadQuizList();
     onQuizChanged(m_quizCombo->currentIndex());
-    rebuildTypePage(); // initial MC rows
+    rebuildTypePage();  // initial MC rows
 }
 
 QuestionEditorWindow::~QuestionEditorWindow() = default;
 
-// ==== Slots ====
-
-void QuestionEditorWindow::onCreateQuiz()
-{
+void QuestionEditorWindow::onCreateQuiz() {
     bool ok = false;
-    QString title = QInputDialog::getText(this, "New Quiz", "Title:", QLineEdit::Normal, {}, &ok);
-    if (!ok || title.trimmed().isEmpty())
+    QString title = QInputDialog::getText(this, "New Quiz,", "Title:", QLineEdit::Normal, {}, &ok);
+    if (!ok || title.trimmed().isEmpty()) {
         return;
+    }
 
     Quiz q;
     q.title = title.trimmed();
@@ -211,8 +265,9 @@ void QuestionEditorWindow::onCreateQuiz()
         QMessageBox::critical(this, "Error", "Failed to create quiz.");
         return;
     }
+
     reloadQuizList();
-    // set current to the new one
+    // Set current to the new one
     for (int i = 0; i < m_quizCombo->count(); ++i) {
         if (m_quizCombo->itemData(i).toInt() == id) {
             m_quizCombo->setCurrentIndex(i);
@@ -221,55 +276,54 @@ void QuestionEditorWindow::onCreateQuiz()
     }
 }
 
-void QuestionEditorWindow::onQuizChanged(int)
-{
+void QuestionEditorWindow::onQuizChanged(int) {
     reloadQuestionList();
     resetEditor();
 }
 
-void QuestionEditorWindow::onQuestionRowActivated(const QModelIndex& index)
-{
+void QuestionEditorWindow::onQuestionRowActivated(const QModelIndex& index) {
     if (!index.isValid()) return;
     int row = index.row();
-    int qid = m_questionModel->item(row, 0)->text().toInt(); // hidden ID col
+    int qid = m_questionModel->item(row, 0)->text().toInt();  // hidden ID col
     loadQuestionIntoEditor(qid);
 }
 
-void QuestionEditorWindow::onNewQuestion()
-{
+void QuestionEditorWindow::onNewQuestion() {
     resetEditor();
     m_mode = Mode::Create;
 }
 
-void QuestionEditorWindow::onDeleteQuestion()
-{
+void QuestionEditorWindow::onDeleteQuestion() {
     auto idx = m_questionTable->currentIndex();
     if (!idx.isValid()) {
         QMessageBox::information(this, "Info", "Select question to delete.");
         return;
     }
+
     int row = idx.row();
     int qid = m_questionModel->item(row, 0)->text().toInt();
 
     if (QMessageBox::question(this, "Confirm", "Delete this question?") == QMessageBox::Yes) {
-        // remove answers -> cascade ON DELETE CASCADE for answers?
+        // Remove answers -> cascade ON DELETE CASCADE for answers?
         AnswerRepository::removeByQuestion(qid);
+
         if (!QuestionRepository::remove(qid)) {
-            QMessageBox::warning(this, "Error", "Delete failed.");
+            QMessageBox::warning(this, "Error", "Delete failed");
             return;
         }
+
         reloadQuestionList();
         if (m_currentQuestionId == qid) resetEditor();
     }
 }
 
-void QuestionEditorWindow::onPreviewQuestion()
-{
+void QuestionEditorWindow::onPreviewQuestion() {
     auto idx = m_questionTable->currentIndex();
     if (!idx.isValid()) {
         QMessageBox::information(this, "Info", "Select question to preview.");
         return;
     }
+
     int row = idx.row();
     int qid = m_questionModel->item(row, 0)->text().toInt();
 
@@ -277,7 +331,7 @@ void QuestionEditorWindow::onPreviewQuestion()
     if (!qOpt) return;
     auto answers = AnswerRepository::byQuestion(qid);
 
-    // Simple preview dialog
+    // Simple preivew dialog
     QDialog dlg(this);
     dlg.setWindowTitle("Preview");
 
@@ -320,22 +374,21 @@ void QuestionEditorWindow::onPreviewQuestion()
     dlg.exec();
 }
 
-void QuestionEditorWindow::onQuestionTypeChanged(int)
-{
+void QuestionEditorWindow::onQuestionTypeChanged(int) {
     rebuildTypePage();
 }
 
-void QuestionEditorWindow::onAddAnswerRow()
-{
+void QuestionEditorWindow::onAddAnswerRow() {
     addAnswerRowMC();
 }
 
-void QuestionEditorWindow::onSaveQuestion()
-{
+void QuestionEditorWindow::onSaveQuestion() {
     Question q;
     QList<Answer> answers;
-    if (!validateAndCollect(q, answers))
+
+    if (!validateAndCollect(q, answers)) {
         return;
+    }
 
     if (m_mode == Mode::Create) {
         int qid = QuestionRepository::create(q);
@@ -343,15 +396,19 @@ void QuestionEditorWindow::onSaveQuestion()
             QMessageBox::critical(this, "Error", "Failed to insert question.");
             return;
         }
+
+        bool ok = true;
         for (auto& a : answers) {
             a.questionId = qid;
-            if (AnswerRepository::create(a) < 0) {
-                QMessageBox::warning(this, "Warning", "Failed to insert some answer.");
-            }
+            ok &= AnswerRepository::create(a);
         }
+        if (!ok) {
+            QMessageBox::warning(this,"Warning","At least one answer insert failed.");
+        }
+
         QMessageBox::information(this, "OK", "Question created.");
         reloadQuestionList();
-        resetEditor(); // ready for new create
+        resetEditor();  // Ready for new create
     } else {
         // Update existing
         q.id = m_currentQuestionId;
@@ -359,6 +416,7 @@ void QuestionEditorWindow::onSaveQuestion()
             QMessageBox::critical(this, "Error", "Question update failed!");
             return;
         }
+
         // Remove old answers and insert new
         AnswerRepository::removeByQuestion(q.id);
         for (auto& a : answers) {
@@ -370,8 +428,8 @@ void QuestionEditorWindow::onSaveQuestion()
     }
 }
 
-// ==== Helpers ====
-
+// Helper functions
+// ----------------
 void QuestionEditorWindow::rebuildTypePage()
 {
     m_typeStack->setCurrentIndex(m_typeCombo->currentIndex());
@@ -591,3 +649,4 @@ void QuestionEditorWindow::resetEditor()
     m_typeCombo->setCurrentIndex(0);
     rebuildTypePage();
 }
+
