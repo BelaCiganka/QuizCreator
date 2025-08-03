@@ -28,27 +28,27 @@ int QuestionRepository::create(const Question &q) {
     return qu.lastInsertId().toInt();
 }
 
-bool QuestionRepository::update(const Question &q)
+bool QuestionRepository::update(const Question& q)
 {
     QSqlQuery qu(Database::instance().db());
-    qu.prepare(R"(
-        UPDATE questions SET quiz_id=:quiz, type=:type, text=:text, hind=:hint, difficulty=:diff
-        WHERE id=:id
-)");
+    qu.prepare(R"(UPDATE questions SET
+                    quiz_id   = :quiz,
+                    type      = :typ,
+                    text      = :txt,
+                    hint      = :hint,
+                    difficulty= :dif
+                  WHERE id = :id)");
     qu.bindValue(":quiz", q.quizId);
-    qu.bindValue(":type", toInt(q.type));
-    qu.bindValue(":text", q.text);
+    qu.bindValue(":typ",  int(q.type));
+    qu.bindValue(":txt",  q.text.trimmed());
     qu.bindValue(":hint", q.hint);
-    qu.bindValue(":diff", q.difficulty);
-    qu.bindValue(":id", q.id);
+    qu.bindValue(":dif",  q.difficulty);
+    qu.bindValue(":id",   q.id);
 
-    if (!qu.exec()) {
-        qWarning() << qu.lastError();
-        return false;
-    }
-
+    if (!qu.exec()) { qWarning() << qu.lastError(); return false; }
     return qu.numRowsAffected() > 0;
 }
+
 
 bool QuestionRepository::remove(int id) {
     QSqlQuery qu(Database::instance().db());

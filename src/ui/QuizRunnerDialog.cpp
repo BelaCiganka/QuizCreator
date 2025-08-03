@@ -17,11 +17,13 @@
 QuizRunnerDialog::QuizRunnerDialog(const User& user,
                                    int quizId,
                                    QuizSelectDialog::Mode mode,
+                                   QuizSelectDialog::Direction dir,
                                    QWidget* parent)
     : QDialog(parent)
     , m_user(user)
     , m_quizId(quizId)
     , m_mode(mode)
+    , m_dir(dir)
 {
     setWindowTitle("Quiz in progress");
     resize(700,500);
@@ -36,35 +38,119 @@ QuizRunnerDialog::QuizRunnerDialog(const User& user,
 }
 
 // ---------- data load ----------
+// void QuizRunnerDialog::loadQuestions()
+// {
+//     // 0) sve iz baze za taj kviz + shuffle
+//     auto qs = QuestionRepository::byQuiz(m_quizId);
+//     std::shuffle(qs.begin(), qs.end(), *QRandomGenerator::global());
+
+//     for (const auto &q : qs)
+//     {
+//         // 1) filter po režimu  ─────────────────────────────────────────
+//         //    True/False mod: prihvati samo TF
+//         if (m_mode == QuizSelectDialog::Mode::TrueFalse && q.type != QuestionType::TrueFalse)
+//             continue;
+
+//         //    MultipleChoice mod: odbaci SAMO True/False,
+//         //    zadrži MultipleChoice + ShortAnswer (konvertovaćemo ih)
+//         if (m_mode == QuizSelectDialog::Mode::MultipleChoice && q.type == QuestionType::TrueFalse)
+//             continue;
+//         //  (Mixed mod ne odbacuje ništa ovde)
+
+//         // 2) napravi SessionQuestion zapis
+//         SessionQuestion sq;
+//         sq.q       = q;
+//         sq.answers = AnswerRepository::byQuestion(q.id);
+
+//         //    elementarna validacija – preskoči ako nema odgovora
+//         if (sq.answers.isEmpty())
+//             continue;
+
+//         switch (q.type) {
+//         case QuestionType::TrueFalse:
+//             if (sq.answers.size() != 2) continue;
+//             break;
+//         case QuestionType::MultipleChoice:
+//             if (sq.answers.size() < 2)  continue;
+//             break;
+//         case QuestionType::ShortAnswer:
+//             /* bar 1 odgovor već imamo */
+//             break;
+//         }
+
+//         // 3) Kada je režim MC *ili* Mixed i pitanje je ShortAnswer
+//         //    → generiši MC varijantu (1 tačan + 3 pogrešna)
+//         if ((m_mode == QuizSelectDialog::Mode::MultipleChoice ||
+//              m_mode == QuizSelectDialog::Mode::Mixed) &&
+//             q.type  == QuestionType::ShortAnswer)
+//         {
+//             const QString correct = sq.answers.first().text;
+
+//             // pool drugih short-odgovora u istom kvizu
+//             QList<QString> pool;
+//             for (const auto &cand : qs) {
+//                 if (cand.type != QuestionType::ShortAnswer || cand.id == q.id)
+//                     continue;
+//                 auto candAns = AnswerRepository::byQuestion(cand.id);
+//                 if (!candAns.isEmpty())
+//                     pool << candAns.first().text;
+//             }
+//             pool.removeAll(correct);
+//             std::shuffle(pool.begin(), pool.end(), *QRandomGenerator::global());
+
+//             // obezbedi 3 distractora
+//             while (pool.size() < 3)
+//                 pool << "???";
+
+//             QList<Answer> mc;
+//             mc << Answer{ .text = correct, .isCorrect = true };
+//             for (int i = 0; i < 3; ++i)
+//                 mc << Answer{ .text = pool[i], .isCorrect = false };
+//             std::shuffle(mc.begin(), mc.end(), *QRandomGenerator::global());
+
+//             // upiši izmenjeni tip i answers
+//             sq.q.type  = QuestionType::MultipleChoice;
+//             sq.answers = mc;
+//         }
+
+//         // 4) Ubaci u listu za kviz-run
+//         m_questions << sq;
+//     }
+// }
+
 void QuizRunnerDialog::loadQuestions()
 {
-    // 0) sve iz baze za taj kviz + shuffle
     auto qs = QuestionRepository::byQuiz(m_quizId);
     std::shuffle(qs.begin(), qs.end(), *QRandomGenerator::global());
 
-    for (const auto &q : qs)
+    for (const Question &q : qs)
     {
-        // 1) filter po režimu  ─────────────────────────────────────────
-        //    True/False mod: prihvati samo TF
+        /* 1) filter po modu */
         if (m_mode == QuizSelectDialog::Mode::TrueFalse && q.type != QuestionType::TrueFalse)
             continue;
-
-        //    MultipleChoice mod: odbaci SAMO True/False,
-        //    zadrži MultipleChoice + ShortAnswer (konvertovaćemo ih)
         if (m_mode == QuizSelectDialog::Mode::MultipleChoice && q.type == QuestionType::TrueFalse)
             continue;
-        //  (Mixed mod ne odbacuje ništa ovde)
+        if (m_mode == QuizSelectDialog::Mode::ShortAnswer && q.type != QuestionType::ShortAnswer)
+            continue;
 
-        // 2) napravi SessionQuestion zapis
+        /* 2) SessionQuestion */
         SessionQuestion sq;
-        sq.q       = q;
+        sq.q       = q;                                  // OK: sq.q
         sq.answers = AnswerRepository::byQuestion(q.id);
-
-        //    elementarna validacija – preskoči ako nema odgovora
         if (sq.answers.isEmpty())
             continue;
 
-        switch (q.type) {
+        /* smer – Reverse: zameni tekst pitanja i tačan odgovor */
+        if (m_dir == QuizSelectDialog::Direction::Reverse &&
+            q.type == QuestionType::ShortAnswer)
+        {
+            QString origAnswer = sq.answers.first().text; // prevod
+            sq.answers.first().text = q.text;             // tačan = srpska reč
+            sq.q.text = origAnswer;                       // pitanje = prevod
+        }
+
+        /* minimalna validacija */
+        switch (sq.q.type) {
         case QuestionType::TrueFalse:
             if (sq.answers.size() != 2) continue;
             break;
@@ -72,33 +158,32 @@ void QuizRunnerDialog::loadQuestions()
             if (sq.answers.size() < 2)  continue;
             break;
         case QuestionType::ShortAnswer:
-            /* bar 1 odgovor već imamo */
             break;
         }
 
-        // 3) Kada je režim MC *ili* Mixed i pitanje je ShortAnswer
-        //    → generiši MC varijantu (1 tačan + 3 pogrešna)
-        if ((m_mode == QuizSelectDialog::Mode::MultipleChoice ||
-             m_mode == QuizSelectDialog::Mode::Mixed) &&
+        /* 3) Konverzija SA → MC (Mixed ili MC mod) */
+        if ((m_mode == QuizSelectDialog::Mode::Mixed || m_mode == QuizSelectDialog::Mode::MultipleChoice) &&
             q.type  == QuestionType::ShortAnswer)
         {
-            const QString correct = sq.answers.first().text;
+            QString correct = sq.answers.first().text;
 
-            // pool drugih short-odgovora u istom kvizu
+            /* prikupi kandidatske distractore */
             QList<QString> pool;
-            for (const auto &cand : qs) {
+            for (const Question &cand : qs) {
                 if (cand.type != QuestionType::ShortAnswer || cand.id == q.id)
                     continue;
-                auto candAns = AnswerRepository::byQuestion(cand.id);
-                if (!candAns.isEmpty())
-                    pool << candAns.first().text;
-            }
-            pool.removeAll(correct);
-            std::shuffle(pool.begin(), pool.end(), *QRandomGenerator::global());
+                auto ansList = AnswerRepository::byQuestion(cand.id);
+                if (ansList.isEmpty()) continue;
 
-            // obezbedi 3 distractora
-            while (pool.size() < 3)
-                pool << "???";
+                /*  ovde JE bila greška: cand.q.text –› cand.text  */
+                QString candidate = (m_dir == QuizSelectDialog::Direction::Reverse)
+                                        ? cand.text                // sr reč
+                                        : ansList.first().text;    // eng prevod
+                if (candidate != correct)
+                    pool << candidate;
+            }
+            std::shuffle(pool.begin(), pool.end(), *QRandomGenerator::global());
+            while (pool.size() < 3) pool << "???";
 
             QList<Answer> mc;
             mc << Answer{ .text = correct, .isCorrect = true };
@@ -106,15 +191,16 @@ void QuizRunnerDialog::loadQuestions()
                 mc << Answer{ .text = pool[i], .isCorrect = false };
             std::shuffle(mc.begin(), mc.end(), *QRandomGenerator::global());
 
-            // upiši izmenjeni tip i answers
-            sq.q.type  = QuestionType::MultipleChoice;
-            sq.answers = mc;
+            sq.q.type   = QuestionType::MultipleChoice;
+            sq.answers  = mc;
         }
 
-        // 4) Ubaci u listu za kviz-run
         m_questions << sq;
     }
 }
+
+
+
 // ---------- UI ----------
 void QuizRunnerDialog::setupUI()
 {

@@ -27,6 +27,7 @@ public:
     QuizRunnerDialog(const User& user,
                      int quizId,
                      QuizSelectDialog::Mode mode,
+                     QuizSelectDialog::Direction dir,
                      QWidget* parent=nullptr);
 
 private slots:
@@ -61,6 +62,7 @@ private:
     const User m_user;
     const int  m_quizId;
     const QuizSelectDialog::Mode m_mode;
+    const QuizSelectDialog::Direction m_dir;
 
     QList<SessionQuestion> m_questions;
     int    m_currIdx  = 0;
