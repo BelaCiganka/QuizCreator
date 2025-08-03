@@ -6,36 +6,35 @@
 #include <QVariant>
 #include <QDebug>
 
+/* INSERT -------------------------------------------------------------*/
 bool AnswerRepository::create(Answer& a)
 {
     QSqlQuery qu(Database::instance().db());
     qu.prepare(R"(INSERT INTO answers
                   (question_id, text, is_correct)
-                  VALUES (:qid, :txt, :isc))");           //  :qid  :txt  :isc
+                  VALUES (:qid, :txt, :isc))");
     qu.bindValue(":qid", a.questionId);
-    qu.bindValue(":txt", a.text.trimmed());               //  ИМЕ мора бити :txt
-    qu.bindValue(":isc", a.isCorrect ? 1 : 0);            //  ИМЕ :isc
+    qu.bindValue(":txt", a.text.trimmed());
+    qu.bindValue(":isc", a.isCorrect ? 1 : 0);
 
-    if (!qu.exec()) {
-        qWarning() << qu.lastError();       // ← више неће јављати mismatch
-        return false;
-    }
+    if (!qu.exec()) { qWarning() << qu.lastError(); return false; }
     a.id = qu.lastInsertId().toInt();
     return true;
 }
 
-bool AnswerRepository::update(const Answer& a) {
+/* UPDATE -------------------------------------------------------------*/
+bool AnswerRepository::update(const Answer& a)
+{
     QSqlQuery qu(Database::instance().db());
-    qu.prepare("UPDATE answers SET text=:t, is_correct=:c WHERE id=:id");
-    qu.bindValue(":t", a.text);
-    qu.bindValue(":c", a.isCorrect ? 1 : 0);
-    qu.bindValue(":id", a.id);
+    qu.prepare(R"(UPDATE answers
+                  SET text = :txt,
+                      is_correct = :isc
+                  WHERE id = :id)");
+    qu.bindValue(":txt",  a.text.trimmed());
+    qu.bindValue(":isc",  a.isCorrect ? 1 : 0);
+    qu.bindValue(":id",   a.id);
 
-    if (!qu.exec()) {
-        qWarning() << qu.lastError();
-        return false;
-    }
-
+    if (!qu.exec()) { qWarning() << qu.lastError(); return false; }
     return qu.numRowsAffected() > 0;
 }
 

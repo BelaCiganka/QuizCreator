@@ -48,7 +48,9 @@ void MainMenuWindow::onStartQuiz() {
     QuizRunnerDialog run(m_user,
                          dlg.selectedQuizId(),
                          dlg.selectedMode(),
+                         dlg.selectedDir(),
                          nullptr);
+
 
     run.exec();
 }

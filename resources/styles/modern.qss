@@ -1,20 +1,162 @@
-QMainWindow {
-    background: #1e1e1e;
-    color: #f0f0f0;
-    font-family: "Sans Serif";
+/* =============================================================
+   QuizCreator – Modern Dark Theme (Qt Style Sheet)
+   Author: ChatGPT – August 2025
+   ============================================================= */
+
+/* ----------  Globals  ---------- */
+* {
+    /* font-family fallback uses system UI font */
+    font-family: "Inter", "Segoe UI", "Noto Sans", sans-serif;
     font-size: 14px;
+    color: #f2f2f2;
 }
+
+/* ----------  Window / Dialog  ---------- */
+QWidget {
+    background: #1e1e1e;
+}
+
+QDialog {
+    border-radius: 16px;
+    padding: 12px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                stop:0 #232323, stop:1 #1a1a1a);
+}
+
+/* ----------  Headings  ---------- */
+QLabel[heading="true"] {
+    font-size: 20px;
+    font-weight: 600;
+    color: #fdfdfd;
+}
+
+/* ----------  Buttons  ---------- */
 QPushButton {
+    background: #2b2b2b;
+    border: 1px solid #3f3f3f;
+    border-radius: 12px;
     padding: 6px 14px;
-    border-radius: 6px;
-    background: #3a3a3a;
+    transition: 200ms ease;
 }
+
 QPushButton:hover {
+    background: #3a3a3a;
+    border-color: #5c5c5c;
+}
+
+QPushButton:pressed {
     background: #505050;
 }
-QLineEdit {
-    background: #2a2a2a;
-    border: 1px solid #555;
-    padding: 4px;
-    border-radius: 4px;
+
+QPushButton:disabled {
+    background: #2b2b2b;
+    color: #707070;
+    border-color: #2b2b2b;
+}
+
+/* Primary action (objectName="primaryBtn") */
+QPushButton#primaryBtn {
+    background: #4e8cff;
+    border: none;
+    color: #fff;
+}
+QPushButton#primaryBtn:hover { background: #639bff; }
+QPushButton#primaryBtn:pressed { background: #3a6fe6; }
+QPushButton#primaryBtn:disabled { background: #2f4374; color:#9eaacc; }
+
+/* ----------  ComboBox  ---------- */
+QComboBox {
+    background: #2b2b2b;
+    border: 1px solid #3f3f3f;
+    border-radius: 8px;
+    padding: 4px 32px 4px 8px; /* room for indicator */
+}
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: right 6px center;
+    width: 14px;
+    border: none;
+}
+QComboBox::down-arrow {
+    image: url(:/icons/chevron-down.svg);
+    width: 12px; height: 12px;
+}
+
+/* ----------  LineEdit  ---------- */
+QLineEdit, QTextEdit {
+    background: #262626;
+    border: 1px solid #3f3f3f;
+    border-radius: 8px;
+    padding: 4px 8px;
+}
+QLineEdit:focus, QTextEdit:focus {
+    border-color: #4e8cff;
+}
+
+/* ----------  Table / View  ---------- */
+QTableView {
+    background: #1b1b1b;
+    gridline-color: #303030;
+    selection-background-color: #3d5b99;
+    selection-color: #fff;
+    border: 1px solid #303030;
+}
+QHeaderView::section {
+    background: #2d2d2d;
+    border: none;
+    padding: 4px 6px;
+    font-weight: 600;
+}
+
+/* ----------  ProgressBar  ---------- */
+QProgressBar {
+    background: #2b2b2b;
+    border-radius: 8px;
+    border: 1px solid #3f3f3f;
+    text-align: center;
+    height: 18px;
+    color: #f2f2f2;
+}
+QProgressBar::chunk {
+    background: #4e8cff;
+    border-radius: 6px;
+}
+
+/* ----------  Radio / Check  ---------- */
+QRadioButton::indicator, QCheckBox::indicator {
+    width: 16px; height: 16px;
+}
+QRadioButton::indicator:unchecked {
+    image: url(:/icons/radio-unchecked.svg);
+}
+QRadioButton::indicator:checked {
+    image: url(:/icons/radio-checked.svg);
+}
+QCheckBox::indicator:unchecked {
+    image: url(:/icons/check-unchecked.svg);
+}
+QCheckBox::indicator:checked {
+    image: url(:/icons/check-checked.svg);
+}
+
+/* ----------  Hint Label  ---------- */
+QLabel#hintLabel {
+    color: #ffaa00;
+    font-style: italic;
+}
+
+/* ----------  Links  ---------- */
+QLabel { qproperty-textInteractionFlags: "LinksAccessibleByMouse|TextSelectableByMouse"; }
+QLabel:hover { color: #4e8cff; }
+
+/* ---------- QuizRunner specific ---------- */
+QLabel#questionText {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fdfdfd;
+    margin-bottom: 6px;
+}
+QLabel#hintLabel {
+    color: #ffb454;
+    font-style: italic;
 }
